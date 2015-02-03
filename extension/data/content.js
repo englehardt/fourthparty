@@ -213,7 +213,7 @@ function makeHandler(object) {
 
 // Make an instrumented object proxy
 function makeObjectProxy(objectName, object) {
-	return Proxy.create({
+	var handler = {
 		getOwnPropertyDescriptor: function(name) {
 			return Object.getOwnPropertyDescriptor(object, name);
 		},
@@ -222,9 +222,9 @@ function makeObjectProxy(objectName, object) {
 			return Object.getPropertyDescriptor(object, name);
 		},
 
-		getOwnPropertyNames: function() {
-			return Object.getOwnPropertyNames(object);
-		},
+		//getOwnPropertyNames: function() {
+		//	return Object.getOwnPropertyNames(object);
+		//},
 
 		getPropertyNames: function() {
 			return Object.getPropertyNames(object);
@@ -269,16 +269,16 @@ function makeObjectProxy(objectName, object) {
 			}
 		},
 		
-		set: function(receiver, name, val) {
-			try {
-				logValue(objectName + "." + name, val, "set");
-				object[name] = val;
-				return true;
-			}
-			catch(error) {
-				return false;
-			}
-		},
+                //set: function(receiver, name, val) {
+		//	try {
+		//		logValue(objectName + "." + name, val, "set");
+		//		object[name] = val;
+		//		return true;
+		//	}
+		//	catch(error) {
+		//		return false;
+		//	}
+		//},
 		
 		enumerate: function() {
 			logValue(objectName, null, "enumerate");
@@ -286,13 +286,14 @@ function makeObjectProxy(objectName, object) {
 			for(name in object)
 				result.push(name);
 			return result;
-		},
-		
-		keys: function() {
-			logValue(objectName, null, "keys");
-			return Object.keys(object);
 		}
-	});
+		
+		//keys: function() {
+		//	logValue(objectName, null, "keys");
+		//	return Object.keys(object);
+		//}
+        };
+        return new Proxy(object, handler);
 }
 
 function prettyPrintParameter(parameter)
@@ -314,9 +315,9 @@ function makeFunctionProxy(object, functionName, func) {
 			return Object.getPropertyDescriptor(func, name);
 		},
 
-		getOwnPropertyNames: function() {
-			return Object.getOwnPropertyNames(func);
-		},
+		//getOwnPropertyNames: function() {
+		//	return Object.getOwnPropertyNames(func);
+		//},
 
 		getPropertyNames: function() {
 			return Object.getPropertyNames(func);
@@ -356,25 +357,25 @@ function makeFunctionProxy(object, functionName, func) {
 			}
 		},
 		
-		set: function(receiver, name, val) {
-			try {
-				func[name] = val;
-				return true;
-			}
-			catch(error) {
-				return false;
-			}
-		},
+		//set: function(receiver, name, val) {
+		//	try {
+		//		func[name] = val;
+		//		return true;
+		//	}
+		//	catch(error) {
+		//		return false;
+		//	}
+		//},
 		
 		enumerate: function() {
 			for(name in func)
 				result.push(name);
 			return result;
-		},
-		
-		keys: function() {
-			return Object.keys(func);
 		}
+		
+		//keys: function() {
+		//	return Object.keys(func);
+		//}
 	},
 	function() {
 		try {
@@ -411,12 +412,14 @@ function makeVariableProxyHandler(name, value) {
 
 // Instrument an object's property, treating the property as an object
 function instrumentObjectPropertyAsObject(object, objectName, property, propertyName) {
-	object.__defineGetter__(propertyName, makeObjectProxyHandler(objectName + "." + propertyName, property));
+    Object.defineProperty(object, propertyName, { get: makeObjectProxyHandler(objectName + '.' + propertyName, property) });
+    //object.__defineGetter__(propertyName, makeObjectProxyHandler(objectName + "." + propertyName, property));
 }
 
 // Instrument an object's property, treating the property as a variable
 function instrumentObjectPropertyAsVariable(object, objectName, property, propertyName) {
-	object.__defineGetter__(propertyName, makeVariableProxyHandler(objectName + "." + propertyName, property));
+    Object.defineProperty(object, propertyName, { get: makeVariableProxyHandler(objectName + '.' + propertyName, property) });
+    //object.__defineGetter__(propertyName, makeVariableProxyHandler(objectName + "." + propertyName, property));
 }
 
 // Instrumentation
@@ -439,10 +442,14 @@ for each (var property in navigatorProperties)
 // TODO: Separately instrument the mimetypes for lookup by type and index
 for(var i = 0; i < window.navigator.plugins.length; i++) {
 	// Instrument name lookup
-	if(typeof window.navigator.plugins[i].name == "string" && window.navigator.plugins[i].name != "")
-		window.navigator.plugins.__defineGetter__(window.navigator.plugins[i].name, makeObjectProxyHandler('window.navigator.plugins["' + window.navigator.plugins[i].name + '"]', window.navigator.plugins[i]));
-	// Instrument index lookup
-	window.navigator.plugins.__defineGetter__(i, makeObjectProxyHandler("window.navigator.plugins[" + i + "]", window.navigator.plugins[i]));
+        console.log(window.navigator.plugins);
+	if(typeof window.navigator.plugins[i].name == "string" && window.navigator.plugins[i].name != "") {
+            Object.defineProperty(window.navigator.plugins[i], window.navigator.plugins[i].name, { get: makeObjectProxyHandler('window.navigator.plugins["' + window.navigator.plugins[i].name + '"]', window.navigator.plugins[i]) });
+	    //window.navigator.plugins.__defineGetter__(window.navigator.plugins[i].name, makeObjectProxyHandler('window.navigator.plugins["' + window.navigator.plugins[i].name + '"]', window.navigator.plugins[i]));
+        }
+        // Instrument index lookup
+	Object.defineProperty(window.navigator.plugins[i], i, { get: makeObjectProxyHandler("window.navigator.plugins[" + i + "]", window.navigator.plugins[i]) });
+        //window.navigator.plugins.__defineGetter__(i, makeObjectProxyHandler("window.navigator.plugins[" + i + "]", window.navigator.plugins[i]));
 }
 
 // Instrument window.navigator.plugins.*
@@ -457,11 +464,14 @@ instrumentObjectPropertyAsObject(window.navigator, "window.navigator", window.na
 for(var i = 0; i < window.navigator.mimeTypes.length; i++) {
 	// Instrument type lookup
 	if(typeof window.navigator.mimeTypes[i].type == "string" && window.navigator.mimeTypes[i].type != "") {
-		window.navigator.mimeTypes[i].__defineGetter__("enabledPlugin", makeObjectProxyHandler('window.navigator.mimeTypes["' + window.navigator.mimeTypes[i].type + '"].enabledPlugin', window.navigator.mimeTypes[i].enabledPlugin));
-		window.navigator.mimeTypes.__defineGetter__(window.navigator.mimeTypes[i].type, makeObjectProxyHandler('window.navigator.mimeTypes["' + window.navigator.mimeTypes[i].type + '"]', window.navigator.mimeTypes[i]));
+	    Object.defineProperty(window.navigator.mimeTypes[i],"enabledPlugin", { get: makeObjectProxyHandler('window.navigator.mimeTypes["' + window.navigator.mimeTypes[i].type + '"].enabledPlugin', window.navigator.mimeTypes[i].enabledPlugin) });
+            //window.navigator.mimeTypes[i].__defineGetter__("enabledPlugin", makeObjectProxyHandler('window.navigator.mimeTypes["' + window.navigator.mimeTypes[i].type + '"].enabledPlugin', window.navigator.mimeTypes[i].enabledPlugin));
+	    Object.defineProperty(window.navigator.mimeTypes, window.navigator.mimeTypes[i].type, { get:makeObjectProxyHandler('window.navigator.mimeTypes["' + window.navigator.mimeTypes[i].type + '"]', window.navigator.mimeTypes[i]) });
+            //window.navigator.mimeTypes.__defineGetter__(window.navigator.mimeTypes[i].type, makeObjectProxyHandler('window.navigator.mimeTypes["' + window.navigator.mimeTypes[i].type + '"]', window.navigator.mimeTypes[i]));
 	}
 	// Instrument index lookup
-	window.navigator.mimeTypes.__defineGetter__(i, makeObjectProxyHandler("window.navigator.mimeTypes[" + i + "]", window.navigator.mimeTypes[i]));
+	Object.defineProperty(window.navigator.mimeTypes, i, { get: makeObjectProxyHandler("window.navigator.mimeTypes[" + i + "]", window.navigator.mimeTypes[i]) });
+        //window.navigator.mimeTypes.__defineGetter__(i, makeObjectProxyHandler("window.navigator.mimeTypes[" + i + "]", window.navigator.mimeTypes[i]));
 }
 
 // Instrument window.navigator.mimeTypes.*
@@ -486,7 +496,8 @@ instrumentObjectPropertyAsObject(window, "window", window.sessionStorage, "sessi
 // Instrument window.getComputedStyle
 // BROKEN
 // TODO: Better represent the element called on
-window.__defineGetter__("getComputedStyle", makeFunctionProxyHandler(window, "window.getComputedStyle", window.getComputedStyle));
+Object.defineProperty(window, "getComputedStyle", { get: makeFunctionProxyHandler(window, "window.getComputedStyle", window.getComputedStyle) });
+//window.__defineGetter__("getComputedStyle", makeFunctionProxyHandler(window, "window.getComputedStyle", window.getComputedStyle));
 
 // Instrument window.name
 // WORKS
