@@ -6,20 +6,21 @@ let(window = unsafeWindow) {
 
 // Header guard workaround for Jetpack multiple script loading bug
 if(typeof window.navigator.instrumented == "undefined") {
-window.navigator.__defineGetter__("instrumented", function() { return true; });
+Object.defineProperty(window.navigator, "instrumented", { get: function() { return true; }});
 
 // Debugging
 
 // Default is off, to enable include in your script
-// window.navigator.__defineGetter__("intrumentation_debugging", function() { return true; });
-window.navigator.__defineGetter__("intrumentation_debugging", function() { return false; });
+Object.defineProperty(window.navigator, "instrumented_debugging", { get: function() { return true; }});
 function debugging() { return window.navigator.instrumentation_debugging; }
 
 // Debugging tool - last accessed variable
 var last_accessed = "";
-window.navigator.__defineGetter__("last_accessed", function() { return last_accessed; });
+Object.defineProperty(window.navigator, "last_accessed", { get: function() { return last_accessed; }});
 
-// Instrumentation helpers
+/*
+ * Instrumentation helpers
+ */
 
 // Recursively generates a path for an element
 function getPathToDomElement(element) {
@@ -116,14 +117,12 @@ function logValue(instrumentedVariableName, value, operation) {
 		});
 	}
 	catch(error) {
-	/*
 		console.log("Unsuccessful value log!");
 		console.log("Operation: " + operation);
 		console.log("Symbol: " + instrumentedVariableName);
 		console.log("String Value: " + value);
 		console.log("Serialized Value: " + serializeObject(value));
 		logErrorToConsole(error);
-	*/
 	}
 	inLog = false;
 }
@@ -134,7 +133,6 @@ function logCall(instrumentedFunctionName, args) {
 		return;
 	inLog = true;
 	try {	
-		/*
 		console.log("logCall");
 		console.log("Function Name: " + instrumentedFunctionName);
 		console.log("Args: " + args.length);
@@ -148,8 +146,9 @@ function logCall(instrumentedFunctionName, args) {
 				console.log("" + args[i].wrappedJSObject);
 				console.log(logLine + Object.keys(args[i]));
 			}
-		}*/
-		// Convert special arguments array to a standard array for JSONifying
+                }
+
+                // Convert special arguments array to a standard array for JSONifying
 		var serialArgs = [ ];
 		for(var i = 0; i < args.length; i++)
 			serialArgs.push(serializeObject(args[i]));
@@ -166,22 +165,6 @@ function logCall(instrumentedFunctionName, args) {
 	}
 	inLog = false;
 }
-
-/*
-function log(instrumentedVariableName) {
-	try {
-		self.postMessage(instrumentedVariableName);
-		if(debugging())
-			last_accessed = instrumentedVariableName;
-	}
-	catch(error) {
-		console.log("Attempted to log: " + instrumentedVariableName);
-	}
-}
-*/
-
-// Disable setting the document location directly
-// Jetpack scripts currently detach when the document is changed in JavaScript
 
 // Rough implementations of Object.getPropertyDescriptor and Object.getPropertyNames
 // See http://wiki.ecmascript.org/doku.php?id=harmony:extended_object_api
@@ -206,304 +189,189 @@ Object.getPropertyNames = function (subject, name) {
 	return props;
 };
 
-// Make an anonymous handler function that returns an object
-function makeHandler(object) {
-	return function() { return object; };
+/*
+ *  Direct instrumentation of javascript objects
+ */
+
+// Use for direct objects
+function instrumentObject(object, objectName) {
+    var properties = Object.getPropertyNames(object);
+    for (var i = 0; i < properties.length; i++) {
+        instrumentObjectProperty(object, objectName, properties[i]);
+    }
+}
+        
+function instrumentObjectProperty(object, objectName, propertyName) {
+    try {
+        var property = object[propertyName];
+        if (typeof property == 'function') {
+            logFunction(object, objectName, propertyName);
+        } else {
+            logProperty(object, objectName, propertyName);
+        }
+    } catch(err) {
+        //console.log(err);
+    }
 }
 
-// Make an instrumented object proxy
-function makeObjectProxy(objectName, object) {
-	var handler = {
-		getOwnPropertyDescriptor: function(name) {
-			return Object.getOwnPropertyDescriptor(object, name);
-		},
-
-		getPropertyDescriptor: function(name) {
-			return Object.getPropertyDescriptor(object, name);
-		},
-
-		//getOwnPropertyNames: function() {
-		//	return Object.getOwnPropertyNames(object);
-		//},
-
-		getPropertyNames: function() {
-			return Object.getPropertyNames(object);
-		},
-
-		defineProperty: function(name, description) {
-			Object.defineProperty(object, name, description);
-		},
-
-		delete: function(name) {
-			try {
-				return delete object[name];
-			}
-			catch(error) {
-				return null;
-			}
-		},
-
-		fix: function() {
-			return undefined;
-		},
-
-		has: function(name) {
-			return name in object;
-		},
-
-		hasOwn: function(name) {
-			return ({}).hasOwnProperty.call(object, name);
-		},
-		
-		get: function(receiver, name) {
-			try {
-				if(typeof object[name] == "function")
-					return makeFunctionProxy(object, objectName + "." + name, object[name]);
-				else {
-					logValue(objectName + "." + name, object[name], "get");
-					return object[name];
-				}
-			}
-			catch(error) {
-				return null;
-			}
-		},
-		
-                //set: function(receiver, name, val) {
-		//	try {
-		//		logValue(objectName + "." + name, val, "set");
-		//		object[name] = val;
-		//		return true;
-		//	}
-		//	catch(error) {
-		//		return false;
-		//	}
-		//},
-		
-		enumerate: function() {
-			logValue(objectName, null, "enumerate");
-			var result = [];
-			for(name in object)
-				result.push(name);
-			return result;
-		}
-		
-		//keys: function() {
-		//	logValue(objectName, null, "keys");
-		//	return Object.keys(object);
-		//}
-        };
-        return new Proxy(object, handler);
+// Use for prototypes of Objects
+function instrumentPrototype(object, objectName) {
+    var properties = Object.getPropertyNames(object);
+    for (var i = 0; i < properties.length; i++) {
+        instrumentPrototypeProperty(object, objectName, properties[i]);
+    }
 }
 
-function prettyPrintParameter(parameter)
-{
-	if(typeof parameter == "string")
-		return '"' + parameter + '"';
-	else
-		return parameter;
+function instrumentPrototypeProperty(object, objectName, propertyName) {
+    try {
+        var property = object[propertyName];
+        if (typeof property == 'function') {
+            logFunction(object, objectName, propertyName);
+        }
+    } catch(err) {
+        logPropertyPrototype(object, objectName, propertyName);
+    }
 }
 
-// Make an instrumented function proxy
-function makeFunctionProxy(object, functionName, func) {
-	return Proxy.createFunction({
-		getOwnPropertyDescriptor: function(name) {
-			return Object.getOwnPropertyDescriptor(func, name);
-		},
-
-		getPropertyDescriptor: function(name) {
-			return Object.getPropertyDescriptor(func, name);
-		},
-
-		//getOwnPropertyNames: function() {
-		//	return Object.getOwnPropertyNames(func);
-		//},
-
-		getPropertyNames: function() {
-			return Object.getPropertyNames(func);
-		},
-
-		defineProperty: function(name, description) {
-			Object.defineProperty(func, name, description);
-		},
-
-		delete: function(name) {
-			try {
-				return delete func[name];
-			}
-			catch(error) {
-				return null;
-			}
-		},
-
-		fix: function() {
-			return undefined;
-		},
-
-		has: function(name) {
-			return name in func;
-		},
-
-		hasOwn: function(name) {
-			return ({}).hasOwnProperty.call(func, name);
-		},
-		
-		get: function(receiver, name) {
-			try {
-				return func[name];
-			}
-			catch(error) {
-				return null;
-			}
-		},
-		
-		//set: function(receiver, name, val) {
-		//	try {
-		//		func[name] = val;
-		//		return true;
-		//	}
-		//	catch(error) {
-		//		return false;
-		//	}
-		//},
-		
-		enumerate: function() {
-			for(name in func)
-				result.push(name);
-			return result;
-		}
-		
-		//keys: function() {
-		//	return Object.keys(func);
-		//}
-	},
-	function() {
-		try {
-			logCall(functionName, arguments);
-			return func.apply(object, arguments);
-		}
-		catch(error) {
-			return null;
-		}
-	},
-	function() {
-		return null;
-	});
+// Log calls to methods
+function logFunction(object, objectName, method) {
+  var originalMethod = object[method];
+  object[method] = function () {
+    console.log(objectName, method, arguments);
+    logCall(objectName + '.' + method, arguments);
+    return originalMethod.apply(this, arguments);
+  };
 }
 
-// Make an instrumented object handler
-function makeObjectProxyHandler(objectName, object) {
-	return makeHandler(makeObjectProxy(objectName, object));
+// Logging for properties of prototype objects
+var instrumentedData = {};
+function logPropertyPrototype(object, objectName, property) {
+    instrumentedData[objectName + property] = undefined;
+    Object.defineProperty(object, property, {
+        configurable: false,
+        get: function() {
+            console.log(objectName, property, "get", instrumentedData[objectName + property]);
+            logValue(objectName + '.' + property, instrumentedData[objectName + property], "get");
+            return instrumentedData[objectName + property];
+        },
+        set: function(value) {
+            console.log(objectName, property, "set", value);
+            logValue(objectName + '.' + property, value, "set");
+            instrumentedData[objectName + property] = value;
+        }
+    });
 }
 
-// Make an instrumented function handler
-function makeFunctionProxyHandler(object, functionName, func) {
-	return makeHandler(makeFunctionProxy(object, functionName, func));
+// Logging properties of objects
+function logProperty(object, objectName, property) {
+    var originalProperty = object[property];
+    Object.defineProperty(object, property, {
+        get: function() {
+            console.log(objectName, property, originalProperty, "get");
+            logValue(objectName + '.' + property, originalProperty, "get");
+            return originalProperty;
+        },
+        set: function(value) {
+            console.log(objectName, property, value, "set");
+            logValue(objectName + '.' + property, value, "set");
+            originalProperty = value;
+        }
+    });
 }
 
-// Make an instrumented variable handler
-// TODO: Include support for setting variables
-function makeVariableProxyHandler(name, value) {
-	return function() {
-		logValue(name, value, "get");
-		return value;
-	};
+/*
+ * Start Instrumentation
+ */
+
+// Access to navigator/screen properties
+var navigatorProperties = [ "appCodeName", "appMinorVersion", "appName", "appVersion", "cookieEnabled", "cpuClass", "geolocation", "onLine", "opsProfile", "platform", "product", "systemLanguage", "userAgent", "userLanguage", "userProfile" ];
+navigatorProperties.forEach(function(property) {
+    instrumentObjectProperty(window.navigator, "window.navigator", property);
+});
+instrumentObject(window.screen, "window.screen");
+
+// Access to plugins
+for (var i = 0; i < window.navigator.plugins.length; i++) {
+    instrumentObject(window.navigator.plugins[i], "window.navigator.plugins[" + i + "]");
 }
 
-// Instrument an object's property, treating the property as an object
-function instrumentObjectPropertyAsObject(object, objectName, property, propertyName) {
-    Object.defineProperty(object, propertyName, { get: makeObjectProxyHandler(objectName + '.' + propertyName, property) });
-    //object.__defineGetter__(propertyName, makeObjectProxyHandler(objectName + "." + propertyName, property));
-}
+// Name, localStorage, and sessionsStorage logging
+//windowProperties = [ "name", "localStorage", "sessionStorage" ];
+//windowProperties.forEach(function(property) {
+//    instrumentObjectProperty(window, "window", property);
+//});
+instrumentObject(window.localStorage, "window.localStorage")
+instrumentObject(window.sessionStorage, "window.sessionStorage")
 
-// Instrument an object's property, treating the property as a variable
-function instrumentObjectPropertyAsVariable(object, objectName, property, propertyName) {
-    Object.defineProperty(object, propertyName, { get: makeVariableProxyHandler(objectName + '.' + propertyName, property) });
-    //object.__defineGetter__(propertyName, makeVariableProxyHandler(objectName + "." + propertyName, property));
-}
+// Access to canvas
+instrumentPrototype(window.HTMLCanvasElement.prototype,"HTMLCanvasElement");
+instrumentPrototype(window.CanvasRenderingContext2D.prototype, "CanvasRenderingContext2D");
 
-// Instrumentation
+// Access to webRTC
+instrumentPrototype(window.mozRTCPeerConnection.prototype,"mozRTCPeerConnection");
 
-// Instrument window.screen.*
-// BROKEN
-instrumentObjectPropertyAsObject(window, "window", window.screen, "screen");
+/* OLDER VERSION OF ABOVE IMPLEMENTATION
+
+var contentStorage = {}; 
 
 // Instrument window.navigator.*
-// window.navigator is defined as const, so must instrument variable by variable
-// BROKEN
-var navigatorProperties = [ "appCodeName", "appMinorVersion", "appName", "appVersion", "cookieEnabled", "cpuClass", "onLine", "opsProfile", "platform", "product", "systemLanguage", "userAgent", "userLanguage", "userProfile" ];
-for each (var property in navigatorProperties)
-	instrumentObjectPropertyAsVariable(window.navigator, "window.navigator", window.navigator[property], property);
+window.navigator is defined as const, so must instrument variable by variable
+var navigatorProperties = [ "appCodeName", "appMinorVersion", "appName", "appVersion", "cookieEnabled", "cpuClass", "geolocation", "onLine", "opsProfile", "platform", "product", "systemLanguage", "userAgent", "userLanguage", "userProfile" ];
+navigatorProperties.forEach( function(property) {
+        instrumentObject(window.navigator, "window.navigator", window.navigator[property], property);
+});
+
+// Instrument window.screen.*
+var screenProperties = [ "availTop", "availLeft", "availHeight", "availWidth", "colorDepth", "height", "left", "orientation", "pixelDepth", "top", "width", "mozEnabled", "mozBrightness"];
+screenProperties.forEach( function(property) {
+        instrumentObject(window.screen, "window.screen", window.screen[property], property);
+});
+
 
 // Instrument each plugin in window.navigator.plugins
-// BROKEN
+// FIXME: There are way to get plugins without triggering this
 // TODO: Instrument plugins returned by the item and namedItem methods
 // TODO: Instrument the mime type within each plugin
 // TODO: Separately instrument the mimetypes for lookup by type and index
-for(var i = 0; i < window.navigator.plugins.length; i++) {
-	// Instrument name lookup
-        console.log(window.navigator.plugins);
-	if(typeof window.navigator.plugins[i].name == "string" && window.navigator.plugins[i].name != "") {
-            Object.defineProperty(window.navigator.plugins[i], window.navigator.plugins[i].name, { get: makeObjectProxyHandler('window.navigator.plugins["' + window.navigator.plugins[i].name + '"]', window.navigator.plugins[i]) });
-	    //window.navigator.plugins.__defineGetter__(window.navigator.plugins[i].name, makeObjectProxyHandler('window.navigator.plugins["' + window.navigator.plugins[i].name + '"]', window.navigator.plugins[i]));
-        }
-        // Instrument index lookup
-	Object.defineProperty(window.navigator.plugins[i], i, { get: makeObjectProxyHandler("window.navigator.plugins[" + i + "]", window.navigator.plugins[i]) });
-        //window.navigator.plugins.__defineGetter__(i, makeObjectProxyHandler("window.navigator.plugins[" + i + "]", window.navigator.plugins[i]));
+var pluginProperties = [ "name", "version", "filename" ];
+function instrumentPlugin(pluginObject, objectName) {
+    pluginProperties.forEach( function(property) {
+        instrumentObject(pluginObject, objectName, pluginObject[property], property);
+    });
 }
 
-// Instrument window.navigator.plugins.*
-// BROKEN
-instrumentObjectPropertyAsObject(window.navigator, "window.navigator", window.navigator.plugins, "plugins");
+for (var i = 0; i < window.navigator.plugins.length; i++) {
+    instrumentPlugin(window.navigator.plugins[i], "window.navigator.plugins[" + i + "]");
+}
 
 // Instrument each mime type in window.navigator.mimeTypes
 // Uses deep copies of each mime type to preserve the path through the enabledPlugin property
-// BROKEN
+// BROKEN / SPAMS
 // TODO: Instrument mime types returned by the item and namedItem methods
-// TODO: Separately instrument enabledPlugin for lookup by type and index
-for(var i = 0; i < window.navigator.mimeTypes.length; i++) {
-	// Instrument type lookup
-	if(typeof window.navigator.mimeTypes[i].type == "string" && window.navigator.mimeTypes[i].type != "") {
-	    Object.defineProperty(window.navigator.mimeTypes[i],"enabledPlugin", { get: makeObjectProxyHandler('window.navigator.mimeTypes["' + window.navigator.mimeTypes[i].type + '"].enabledPlugin', window.navigator.mimeTypes[i].enabledPlugin) });
-            //window.navigator.mimeTypes[i].__defineGetter__("enabledPlugin", makeObjectProxyHandler('window.navigator.mimeTypes["' + window.navigator.mimeTypes[i].type + '"].enabledPlugin', window.navigator.mimeTypes[i].enabledPlugin));
-	    Object.defineProperty(window.navigator.mimeTypes, window.navigator.mimeTypes[i].type, { get:makeObjectProxyHandler('window.navigator.mimeTypes["' + window.navigator.mimeTypes[i].type + '"]', window.navigator.mimeTypes[i]) });
-            //window.navigator.mimeTypes.__defineGetter__(window.navigator.mimeTypes[i].type, makeObjectProxyHandler('window.navigator.mimeTypes["' + window.navigator.mimeTypes[i].type + '"]', window.navigator.mimeTypes[i]));
-	}
-	// Instrument index lookup
-	Object.defineProperty(window.navigator.mimeTypes, i, { get: makeObjectProxyHandler("window.navigator.mimeTypes[" + i + "]", window.navigator.mimeTypes[i]) });
-        //window.navigator.mimeTypes.__defineGetter__(i, makeObjectProxyHandler("window.navigator.mimeTypes[" + i + "]", window.navigator.mimeTypes[i]));
-}
+//for(var i = 0; i < window.navigator.mimeTypes.length; i++) {
+//        instrumentPlugin(window.navigator.mimeTypes[i].enabledPlugin,"window.navigator.mimeTypes[" + i + "].enabledPlugin");
+//        instrumentObject(window.navigator.mimeTypes[i], "window.navigator.mimeTypes["+ i +"]", window.navigator.mimeTypes[i].type, "type");
+//}
 
 // Instrument window.navigator.mimeTypes.*
-// BROKEN
-instrumentObjectPropertyAsObject(window.navigator, "window.navigator", window.navigator.mimeTypes, "mimeTypes");
-
-// Instrument window.navigator.geolocation.* (HTML5 geolocation API)
-// BROKEN
-instrumentObjectPropertyAsObject(window.navigator, "window.navigator", window.navigator.geolocation, "geolocation");
-
-// Instrument window.localStorage (HTML5 local storage API)
-// BROKEN
-instrumentObjectPropertyAsObject(window, "window", window.localStorage, "localStorage");
-
-// Instrument window.sessionStorage (HTML5 session storage API)
-// BROKEN
-instrumentObjectPropertyAsObject(window, "window", window.sessionStorage, "sessionStorage");
-
-// Instrument the HTML5 storage event
-//window.addEventListener("storage", function(event) { log("EVENT: " + event.type); }, false);
+// TODO: window.navigator.plugins.* and window.navigator.mimeTypes.*
+//instrumentObjectPropertyAsObject(window.navigator, "window.navigator", window.navigator.mimeTypes, "mimeTypes");
 
 // Instrument window.getComputedStyle
 // BROKEN
 // TODO: Better represent the element called on
-Object.defineProperty(window, "getComputedStyle", { get: makeFunctionProxyHandler(window, "window.getComputedStyle", window.getComputedStyle) });
 //window.__defineGetter__("getComputedStyle", makeFunctionProxyHandler(window, "window.getComputedStyle", window.getComputedStyle));
+window.getComputedStyle = makeFunctionProxy(window, "window.getComputedStyle", window.getComputedStyle);
 
-// Instrument window.name
-// WORKS
-var window_name = window.name;
-window.__defineGetter__("name", function() { logValue("window.name", window_name, "get"); return window_name; });
-window.__defineSetter__("name", function(value) { logValue("window.name", value, "set"); window_name = value; });
+// Instrument window properties
+//TODO localStorage / sessionStorage not working for setting
+windowProperties = [ "name", "localStorage", "sessionStorage" ];
+windowProperties.forEach( function(property) {
+    instrumentObject(window, "window", window[property], property);
+});
+
+*/
+
 }
 
 }

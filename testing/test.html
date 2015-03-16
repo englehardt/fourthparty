@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+    <meta charset="UTF-8">
+    <title></title>
+    <script src="http://cdn.peerjs.com/0.3/peer.js"></script>
+</head>
+
+<body>
+
+<canvas id="myCanvas" width="200" height="100" style="border:1px solid #000000;"></canvas>
+
+<script type='text/javascript'>
+console.log("Hello -- This is a fourthparty test script")
+
+// HTML CANVAS
+var canvas = document.getElementById("myCanvas")
+var ctx = canvas.getContext("2d")
+var text = "Fourthparty Web Measurement";
+ctx.textBaseline = "top";
+ctx.font = "14px 'Arial'";
+ctx.fillStyle = "#f30";
+ctx.fillRect(100, 1, 80, 30);
+ctx.fillStyle = "rgba(90, 80, 0, 0.8)";
+ctx.fillText(text, 7, 12);
+
+// WEBRTC
+var localID = 'COS561-1'
+var peer = new Peer(localID, {key: 'yzseltk5ob51m7vi'});
+var connections = {};
+var conn = peer.connect('SOME RANDOM PEER')
+
+// LOCAL/SESSION STORAGE
+localStorage.setItem("test","Hello")
+localStorage.getItem("test")
+sessionStorage.setItem("test","Hello2")
+sessionStorage.getItem("Hello2")
+
+</script>
+</body>

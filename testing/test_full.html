@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+    <meta charset="UTF-8">
+    <title></title>
+    <script src="http://cdn.peerjs.com/0.3/peer.js"></script>
+</head>
+
+<body>
+
+<canvas id="myCanvas" width="200" height="100" style="border:1px solid #000000;"></canvas>
+
+<script type='text/javascript'>
+
+Object.getPropertyNames = function (subject, name) {
+    var props = Object.getOwnPropertyNames(subject);
+    var proto = Object.getPrototypeOf(subject);
+    while (proto !== null) {
+        props = props.concat(Object.getOwnPropertyNames(proto));
+        proto = Object.getPrototypeOf(proto);
+    }
+    // FIXME: remove duplicate property names from props
+    return props;
+};
+
+function instrumentObject(object, objectName) {
+    var properties = Object.getPropertyNames(object);
+    for (var i = 0; i < properties.length; i++) {
+        try {
+            var property = object[properties[i]];
+            if (typeof property == 'function') {
+                //console.log(objectName, properties[i], "instrumenting");
+                logFunction(object, objectName, properties[i]);
+            } else {
+                //console.log(objectName, properties[i], "instrumenting");
+                logProperty(object, objectName, properties[i]);
+            }
+        } catch(err) {
+            //console.log(err);
+        }
+    }
+}
+
+function instrumentPrototype(object, objectName) {
+    var properties = Object.getPropertyNames(object);
+    for (var i = 0; i < properties.length; i++) {
+        try {
+            var property = object[properties[i]];
+            if (typeof property == 'function') {
+                //console.log(objectName, properties[i], "instrumenting");
+                logFunction(object, objectName, properties[i]);
+            }
+        } catch(err) {
+            //console.log(objectName, properties[i], "instrumenting-proto");
+            logPropertyPrototype(object, objectName, properties[i]);
+        }
+    }
+}
+
+
+function logFunction(object, objectName, method) {
+  var originalMethod = object[method];
+  object[method] = function () {
+    console.log(objectName, method, arguments);
+    return originalMethod.apply(this, arguments);
+  };
+}
+
+/*
+function logPropertyPrototype(object, objectName, property) {
+    instrumentedData[objectName + property] = undefined;
+    Object.defineProperty(object, property, {
+        configurable: false,
+        get: function() { 
+            console.log(objectName, property, "get", instrumentedData[objectName + property]);
+            return instrumentedData[objectName + property]; 
+            },
+        set: function(value) { 
+            console.log(objectName, property, "set", value);
+            instrumentedData[objectName + property] = value; 
+            defineGetterSetter(this, objectName, property, value); 
+            }
+    });
+}
+*/
+
+/*
+var instrumentedData = {};
+function defineGetterSetter(object, objectName, property, value) {
+    Object.defineProperty(object, property, {
+        get: function() { 
+            console.log(objectName, property, "get", instrumentedData[objectName + property]); 
+            return instrumentedData[objectName + property]
+            },
+        set: function(value) { console.log(objectName, property, "set", value);
+            instrumentedData[objectName + property] = value 
+            }
+    });
+    instrumentedData[objectName + property] = value;
+}
+*/
+
+/*
+var instrumentedData = {};
+function defineGetterSetter(object, objectName, property, value) {
+    Object.defineProperty(object, property, {
+        __proto__: null,
+        value: value
+    });
+}
+*/
+
+
+var instrumentedData = {};
+function logPropertyPrototype(object, objectName, property) {
+    instrumentedData[objectName + property] = undefined;
+    Object.defineProperty(object, property, {
+        configurable: false,
+        get: function() { console.log(objectName, property, "get",
+            instrumentedData[objectName + property]); return instrumentedData[objectName + property] },
+        set: function(value) { console.log(objectName, property, "set", value);
+            instrumentedData[objectName + property] = value }
+    });
+}
+
+
+function logProperty(object, objectName, property) {
+    var originalProperty = object[property];
+    Object.defineProperty(object, property, {
+        get: function() { console.log(objectName, property, originalProperty, "get"); return originalProperty },
+        set: function(value) { console.log(objectName, property, value, "set"); originalProperty = value; } 
+    });
+}
+
+console.log("Hello")
+//instrumentPrototype(HTMLCanvasElement.prototype,"HTMLCanvasElement");
+//instrumentPrototype(CanvasRenderingContext2D.prototype, "CanvasRenderingContext2D");
+
+var canvas = document.getElementById("myCanvas")
+//var canvas = document.createElement("canvas")
+var ctx = canvas.getContext("2d")
+instrumentObject(ctx, "ctx")
+var txt = "BrowserLeaks,com <canvas> 1.0";
+ctx.textBaseline = "top";
+ctx.textBaseline = "top";
+// the most common type
+ctx.font = "14px 'Arial'";
+ctx.font = "14px 'Arial'";
+ctx.textBaseline = "alphabetic";
+ctx.fillStyle = "#f60";
+ctx.fillStyle = "#f60";
+ctx.fillRect(125, 1, 62, 20);
+// some tricks for color mixing
+ctx.fillStyle = "#069";
+ctx.fillText(txt, 2, 15);
+ctx.fillStyle = "rgba(102, 204, 0, 0.7)";
+ctx.fillText(txt, 4, 17);
+
+// WEBRTC
+instrumentPrototype(mozRTCPeerConnection.prototype,"mozRTCPeerConnection");
+var localID = 'COS561-1'
+var peer = new Peer(localID, {key: 'yzseltk5ob51m7vi'});
+var connections = {};
+var conn = peer.connect('SOME RANDOM PEER')
+
+</script>
+</body>
