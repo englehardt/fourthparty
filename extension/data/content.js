@@ -133,9 +133,9 @@ function logCall(instrumentedFunctionName, args) {
 		return;
 	inLog = true;
 	try {	
-		console.log("logCall");
-		console.log("Function Name: " + instrumentedFunctionName);
-		console.log("Args: " + args.length);
+		//console.log("logCall");
+		//console.log("Function Name: " + instrumentedFunctionName);
+		//console.log("Args: " + args.length);
 		for(var i = 0; i < args.length; i++) {
 			var logLine = "Arg " + i + ": ";
 			console.log(logLine + typeof args[i]);
@@ -237,7 +237,7 @@ function instrumentPrototypeProperty(object, objectName, propertyName) {
 function logFunction(object, objectName, method) {
   var originalMethod = object[method];
   object[method] = function () {
-    console.log(objectName, method, arguments);
+    //console.log(objectName, method, arguments);
     logCall(objectName + '.' + method, arguments);
     return originalMethod.apply(this, arguments);
   };
@@ -248,14 +248,14 @@ var instrumentedData = {};
 function logPropertyPrototype(object, objectName, property) {
     instrumentedData[objectName + property] = undefined;
     Object.defineProperty(object, property, {
-        configurable: false,
+        configurable: true,
         get: function() {
-            console.log(objectName, property, "get", instrumentedData[objectName + property]);
+            //console.log(objectName, property, "get", instrumentedData[objectName + property]);
             logValue(objectName + '.' + property, instrumentedData[objectName + property], "get");
             return instrumentedData[objectName + property];
         },
         set: function(value) {
-            console.log(objectName, property, "set", value);
+            //console.log(objectName, property, "set", value);
             logValue(objectName + '.' + property, value, "set");
             instrumentedData[objectName + property] = value;
         }
@@ -266,13 +266,14 @@ function logPropertyPrototype(object, objectName, property) {
 function logProperty(object, objectName, property) {
     var originalProperty = object[property];
     Object.defineProperty(object, property, {
+        configurable: true,
         get: function() {
-            console.log(objectName, property, originalProperty, "get");
+            //console.log(objectName, property, originalProperty, "get");
             logValue(objectName + '.' + property, originalProperty, "get");
             return originalProperty;
         },
         set: function(value) {
-            console.log(objectName, property, value, "set");
+            //console.log(objectName, property, value, "set");
             logValue(objectName + '.' + property, value, "set");
             originalProperty = value;
         }
@@ -296,12 +297,15 @@ for (var i = 0; i < window.navigator.plugins.length; i++) {
 }
 
 // Name, localStorage, and sessionsStorage logging
-//windowProperties = [ "name", "localStorage", "sessionStorage" ];
-//windowProperties.forEach(function(property) {
-//    instrumentObjectProperty(window, "window", property);
-//});
-instrumentObject(window.localStorage, "window.localStorage")
-instrumentObject(window.sessionStorage, "window.sessionStorage")
+// Instrumenting window.localStorage directly doesn't seem to work, so the Storage 
+// prototype must be instrumented instead. Unfortunately this fails to differentiate 
+// between sessionStorage and localStorage. Instead, you'll have to look for a sequence 
+// of a get for the localStorage object followed by a getItem/setItem for the Storage object.
+windowProperties = [ "name", "localStorage", "sessionStorage" ];
+windowProperties.forEach(function(property) {
+    instrumentObjectProperty(window, "window", property);
+});
+instrumentPrototype(window.Storage.prototype, "window.Storage")
 
 // Access to canvas
 instrumentPrototype(window.HTMLCanvasElement.prototype,"HTMLCanvasElement");
@@ -309,68 +313,6 @@ instrumentPrototype(window.CanvasRenderingContext2D.prototype, "CanvasRenderingC
 
 // Access to webRTC
 instrumentPrototype(window.mozRTCPeerConnection.prototype,"mozRTCPeerConnection");
-
-/* OLDER VERSION OF ABOVE IMPLEMENTATION
-
-var contentStorage = {}; 
-
-// Instrument window.navigator.*
-window.navigator is defined as const, so must instrument variable by variable
-var navigatorProperties = [ "appCodeName", "appMinorVersion", "appName", "appVersion", "cookieEnabled", "cpuClass", "geolocation", "onLine", "opsProfile", "platform", "product", "systemLanguage", "userAgent", "userLanguage", "userProfile" ];
-navigatorProperties.forEach( function(property) {
-        instrumentObject(window.navigator, "window.navigator", window.navigator[property], property);
-});
-
-// Instrument window.screen.*
-var screenProperties = [ "availTop", "availLeft", "availHeight", "availWidth", "colorDepth", "height", "left", "orientation", "pixelDepth", "top", "width", "mozEnabled", "mozBrightness"];
-screenProperties.forEach( function(property) {
-        instrumentObject(window.screen, "window.screen", window.screen[property], property);
-});
-
-
-// Instrument each plugin in window.navigator.plugins
-// FIXME: There are way to get plugins without triggering this
-// TODO: Instrument plugins returned by the item and namedItem methods
-// TODO: Instrument the mime type within each plugin
-// TODO: Separately instrument the mimetypes for lookup by type and index
-var pluginProperties = [ "name", "version", "filename" ];
-function instrumentPlugin(pluginObject, objectName) {
-    pluginProperties.forEach( function(property) {
-        instrumentObject(pluginObject, objectName, pluginObject[property], property);
-    });
-}
-
-for (var i = 0; i < window.navigator.plugins.length; i++) {
-    instrumentPlugin(window.navigator.plugins[i], "window.navigator.plugins[" + i + "]");
-}
-
-// Instrument each mime type in window.navigator.mimeTypes
-// Uses deep copies of each mime type to preserve the path through the enabledPlugin property
-// BROKEN / SPAMS
-// TODO: Instrument mime types returned by the item and namedItem methods
-//for(var i = 0; i < window.navigator.mimeTypes.length; i++) {
-//        instrumentPlugin(window.navigator.mimeTypes[i].enabledPlugin,"window.navigator.mimeTypes[" + i + "].enabledPlugin");
-//        instrumentObject(window.navigator.mimeTypes[i], "window.navigator.mimeTypes["+ i +"]", window.navigator.mimeTypes[i].type, "type");
-//}
-
-// Instrument window.navigator.mimeTypes.*
-// TODO: window.navigator.plugins.* and window.navigator.mimeTypes.*
-//instrumentObjectPropertyAsObject(window.navigator, "window.navigator", window.navigator.mimeTypes, "mimeTypes");
-
-// Instrument window.getComputedStyle
-// BROKEN
-// TODO: Better represent the element called on
-//window.__defineGetter__("getComputedStyle", makeFunctionProxyHandler(window, "window.getComputedStyle", window.getComputedStyle));
-window.getComputedStyle = makeFunctionProxy(window, "window.getComputedStyle", window.getComputedStyle);
-
-// Instrument window properties
-//TODO localStorage / sessionStorage not working for setting
-windowProperties = [ "name", "localStorage", "sessionStorage" ];
-windowProperties.forEach( function(property) {
-    instrumentObject(window, "window", window[property], property);
-});
-
-*/
 
 }
 

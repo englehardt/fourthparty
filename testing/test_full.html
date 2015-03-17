@@ -3,7 +3,7 @@
 <head lang="en">
     <meta charset="UTF-8">
     <title></title>
-    <script src="http://cdn.peerjs.com/0.3/peer.js"></script>
+    <!--<script src="http://cdn.peerjs.com/0.3/peer.js"></script>-->
 </head>
 
 <body>
@@ -52,7 +52,7 @@ function instrumentPrototype(object, objectName) {
             }
         } catch(err) {
             //console.log(objectName, properties[i], "instrumenting-proto");
-            logPropertyPrototype(object, objectName, properties[i]);
+            //logPropertyPrototype(object, objectName, properties[i]);
         }
     }
 }
@@ -157,11 +157,19 @@ ctx.fillStyle = "rgba(102, 204, 0, 0.7)";
 ctx.fillText(txt, 4, 17);
 
 // WEBRTC
-instrumentPrototype(mozRTCPeerConnection.prototype,"mozRTCPeerConnection");
-var localID = 'COS561-1'
-var peer = new Peer(localID, {key: 'yzseltk5ob51m7vi'});
-var connections = {};
-var conn = peer.connect('SOME RANDOM PEER')
+//instrumentPrototype(mozRTCPeerConnection.prototype,"mozRTCPeerConnection");
+//var localID = 'COS561-1'
+//var peer = new Peer(localID, {key: 'yzseltk5ob51m7vi'});
+//var connections = {};
+//var conn = peer.connect('SOME RANDOM PEER')
+
+// LOCAL/SESSION STORAGE
+instrumentPrototype(window.Storage.prototype, "localStorage")
+window.localStorage.setItem("test","Hello")
+window.localStorage.getItem("test")
+sessionStorage.setItem("test","Hello2")
+sessionStorage.getItem("Hello2")
+
 
 </script>
 </body>
